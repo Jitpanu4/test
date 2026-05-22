@@ -1,0 +1,206 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ===========================================
+// Order Upload Models (Issue PDS)
+// ===========================================
+
+model OrderUpload {
+  id               String    @id @map("upload_id") @db.VarChar(11)
+  filename         String    @map("upload_filename") @db.Text
+  originalFilename String    @map("upload_original_filename") @db.Text
+  fileSize         Int       @map("upload_filesize")
+  deliveryDate     String?   @map("upload_delivery_date") @db.VarChar(10)
+  status           Int       @default(0) @map("upload_status") //  UPLOADED = 0,PROCESSING = 1,  PREVIEW = 2,  CONFIRMED = 3, CANCELLEDUP = 4, FAILED = 5, PENDING = 6, IMPORTED = 7,  INPROGRESS = 8,  COMPLETED = 9, CANCELLED = 10,
+  orderCount       Int       @default(0) @map("upload_order_count")
+  errorCount       Int       @default(0) @map("upload_error_count")
+  uploadBy         String    @map("upload_by") @db.VarChar(10)
+  uploadTimestamp  DateTime  @default(now()) @map("upload_timestamp")
+  importGroupId    String?   @map("import_group_id") @db.VarChar(20)   // Import Group fields (set on confirmation)
+  issueTime        DateTime? @map("issue_time")
+  issuePerson      String?   @map("issue_person") @db.VarChar(50)
+
+  orderUploadStaging OrderUploadStaging[]
+  orderParts OrderPart[]
+
+  @@map("order_upload")
+}
+
+
+model OrderUploadStaging {
+  id              String  @id @map("staging_id") @db.VarChar(11)
+  uploadId        String  @map("upload_id") @db.VarChar(11)
+  orderPartId     String? @map("order_part_id") @db.VarChar(11)
+  rowNumber       Int     @map("staging_row_number")
+  partCode        String? @map("staging_part_code") @db.VarChar(50)
+  supplierId      String? @map("existing_supplier_id") @db.VarChar(11)
+  supplierCode    String? @map("staging_supplier_code") @db.VarChar(20)
+  partId          String? @map("existing_part_id") @db.VarChar(36)
+  orderQty        Int     @default(0) @map("staging_order_qty")
+  // File-origin context values (display/error info): { partNumber, partName, supplierAlias }
+  errorValue      Json?   @map("error_value")
+  action          String? @map("staging_action") @db.VarChar(30) // OK, PART_NOT_FOUND, INVALID_MIN_PACKING, ERROR
+  errorMessage    String? @map("staging_error_message") @db.Text
+
+  upload OrderUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@index([uploadId])
+  @@map("order_upload_staging")
+}
+
+
+
+model OrderPart {
+  id          String @id @map("order_part_id") @db.VarChar(11)
+  partId      String @map("part_id")  @db.Uuid
+  uploadId    String? @map("upload_id") @db.VarChar(11) //Tai update form PDS to part upload 
+  orderPartQty Int   @default(0) @map("order_part_qty") @db.Integer
+  partNoFile  String? @map("part_number_from_file") @db.VarChar(15)
+  partNameFile  String? @map("part_name_from_file") @db.VarChar(200)
+  supplierCodeFile String? @map("supplier_code_from_file") @db.VarChar(20)
+  supplierAliasFile String? @map("supplier_alias_from_file") @db.VarChar(10)
+  orderPartAction Int @default(0)  @map("order_part_action") //PASS = 0,UPDATE = 1,  DELETED = 2
+
+  uploadPart  OrderUpload? @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  // adjustUploadHistories OrderAdjustUploadHistory[]
+  issuePds OrderIssuePds[]
+
+
+  @@index([uploadId])
+  @@map("order_part")
+}
+ 
+
+ 
+
+model OrderAdjustUploadHistory {
+  id            String @id @map("order_adjust_upload_history_id") @db.VarChar(11)
+  orderPartId   String @map("order_part_id") @db.VarChar(11)
+  uploadId     String @map("uploadid") @db.VarChar(11)
+  partUpdateStatusID      Int @map("status_up_part_id") @db.Integer //0=Part Qty,1=New Part,2=Part Box, 3=Supplier  , 4=Delete
+  orderUploadOriginal  String @map("original_data") @db.VarChar(60) 
+  orderUploadUpdate  String? @map("update_data") @db.VarChar(60) 
+  UpdateBy         String?    @map("update_by") @db.VarChar(10)
+  updateTimestamp  DateTime  @default(now()) @map("update_timestamp")
+
+  // orderPartUp OrderPart @relation(fields: [orderPartId], references: [id], onDelete: Cascade) 
+  // orderPartUp OrderUploadStaging @relation(fields: [orderPartId], references: [id]) 
+ 
+ 
+  // @@index([orderPartId])
+  @@map("order_adjust_upload_history")
+}
+ 
+
+model OrderPds {
+  id           String  @id @map("order_pds_id") @db.VarChar(11)
+  pdsNumber    String  @map("order_pds_number") @db.VarChar(30)
+  pdsType      Int? @map("order_pds_type") @db.Integer // 0=normal,1=other,2 special,3=no pallet
+  pdsStatus    Int  @default(0)  @map("order_pds_status") @db.Integer ////0=Pending,1=Completed,2=Delayed,3=Cancel
+  supplierId  String? @map("supplier_id") @db.Uuid
+  emailStatus      Int @default(0)  @map("email_status") @db.Integer ////0=not sned , 1= by systen,2= manual
+  dowloadStatus    Int  @default(0) @map("download_status") @db.Integer //o=not yet , 1 dowload, 2 = re-dowload,3=delayed
+  supplierAction    Int  @default(4) @map("supplier_action") @db.Integer //4= none,5 can support, 6=cannot supplier
+  confirmBy         String?    @map("confirm_by") @db.VarChar(10)
+  confirmTimestamp  DateTime  @default(now()) @map("confirm_date")
+
+  issuePds OrderIssuePds[]
+  supplierActions OrderSupplierAction[]
+  transports OrderPdsTransport[]
+  specialTransportPickups OrderPdsTransportSpecial[]
+
+  @@map("order_pds")
+}
+ 
+
+
+model OrderIssuePds {
+  id           String  @id @map("order_issue_pds_id") @db.VarChar(11)
+  pdsID        String   @map("order_pds_id") @db.VarChar(11)
+  orderPartID  String   @map("order_part_id") @db.VarChar(11)
+  orderQty     Int @default(0)  @map("pds_part_qty") @db.Integer
+
+  orderUpPds  OrderPds @relation(fields: [pdsID], references: [id], onDelete: Cascade) 
+  orderPartUp OrderPart @relation(fields: [orderPartID], references: [id], onDelete: Cascade) 
+
+  @@index([orderPartID])
+  @@index([pdsID])
+  @@map("order_issue_pds")
+}
+ 
+
+
+
+model OrderSupplierAction {
+  id           String  @id @map("order_supplier_action_id") @db.VarChar(11)
+  pdsID        String   @map("order_pds_id") @db.VarChar(11)
+  actionStatus Int  @default(0)  @map("action_status") @db.Integer // o=not yet , 1 download, 2 = re-dowload,3=delayed ,// 4= none,5 can support 6=cannot supplier
+  action_detail   String?   @map("action_detail") @db.Text()
+  actionBy         String    @map("action_by") @db.VarChar(10)
+  actionTimestamp  DateTime  @default(now()) @map("action_date")
+
+  orderActionPds  OrderPds @relation(fields: [pdsID], references: [id], onDelete: Cascade)  
+
+  @@index([pdsID])
+  @@map("order_supplier_action_history")
+}
+
+
+model OrderPdsTransport {
+  pdsID           String  @id @map("order_pds_id") @db.VarChar(11)
+  idPickup        String @map("schedule_pickup_stops_id") @default(uuid()) @db.Uuid
+
+
+ orderTransportPds  OrderPds @relation(fields: [pdsID], references: [id], onDelete: Cascade)  
+
+  @@index([pdsID])
+  @@index([idPickup])
+  @@map("order_pds_transport")
+}
+
+model OrderTransportSpecial {
+  id           String  @id @map("order_special_transport_id") @db.VarChar(11)
+  vehiclesId   String @map("vehicles_id") @default(uuid()) @db.Uuid
+  confirmTimestamp  DateTime @map("delivery_date") @db.Date
+  timeStart  DateTime @map("arrival_time_start") @db.Timestamp(6)
+  timeEnd    DateTime @map("arrival_time_end") @db.Timestamp(6)
+  assignStatus Int @map("status_assign") @db.Integer  //0=create, 1=confirm,2= cancel
+  createBy         String    @map("create_by") @db.VarChar(10)
+  createTimestamp  DateTime  @default(now()) @map("create_date")
+  transportSpecialPickups OrderPdsTransportSpecial[]
+
+  @@index([vehiclesId])
+  @@map("order_special_transport")
+}
+
+
+
+model OrderPdsTransportSpecial {
+  id           String  @id @map("order_special_pickup_id") @db.VarChar(11)
+  specialTransportID        String   @map("order_special_transport_id") @db.VarChar(11) 
+  pdsID        String   @map("order_pds_id") @db.VarChar(11)  
+  pdsConfirmTimestamp  DateTime @map("delivery_date") @db.Date
+  pdsTimeStart  DateTime @map("arrival_time_start") @db.Timestamp(6)
+  pdsTimeEnd    DateTime @map("arrival_time_end") @db.Timestamp(6)
+  pdsAssignStatus Int @map("status_assign") @db.Integer  //0=none, 1=assign
+  assignBy         String    @map("assign_by") @db.VarChar(10)
+  assignTimestamp  DateTime  @default(now()) @map("assign_date")
+
+
+transportSpecial  OrderTransportSpecial @relation(fields: [specialTransportID], references: [id], onDelete: Cascade)  
+orderActionPds  OrderPds @relation(fields: [pdsID], references: [id], onDelete: Cascade)  
+
+
+  @@index([pdsID])
+  @@index([specialTransportID])
+  @@map("order_special_transport_pickup")
+}
+
